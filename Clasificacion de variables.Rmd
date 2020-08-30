@@ -1,0 +1,123 @@
+---
+title: "Graficacion para Data Science"
+output: html_notebook
+---
+
+En este Notebook te mostrare como clasificar adecuadamente tus variables de un conjunto de datos y como de acuerdo a su clasificación generar gráficas útiles y facil de interpretar.
+
+## Datos
+En este Tutorial trabajaremos con dos fuentes de datos   
+- Pacientes examinados con diabetes https://raw.githubusercontent.com/Cruzalirio/Ucentral/master/Bases/Diabetes.csv   
+- Pacientes examinados por cancer https://raw.githubusercontent.com/Cruzalirio/Ucentral/master/Bases/Cancer.csv
+
+## Tipos de variables
+
+Las variables se clasifican en principio en dos clases   
+- **Cualitativas** Son variables que representan una cualidad, e.g Estrato, Sexo  
+- **Cuantitativas** Son variables numéricas con los cuales tiene sentido sumar o restar  
+  
+**Nota:** Es posible convertir a veces entre variables cualitativas a cuantitativas, y SIEMPRE es posible pasar de cuantitaticas a cualitativas.
+
+**Ejemplo:** Las estrellas que podemos ver en las calificaciones de usuarios en Google Maps es una variable cualitativa pero se convierte a cuantitativa y de hecho es posible operar con ella, en este caso el mismo sitio web nos calcula el promedio.  
+
+### Cualitativas
+Las variables cualitativas pueden ser clasificadas a su vez en dos clases.     
+- **Nominales:** NO pueden ordenarse  
+- **Ordinales:** Sus datos se pueden ordenar  
+
+**Nota:** No se vale el orden alfanumérico  
+
+### Cuantitativas
+Las variables cuantitativas pueden ser clasificadas a su vez en dos clases.     
+- **Discretas:** Variables que toman varoles en un conjunto discreto.  
+- **Continuas:** No sn discretas, tienen decimales.   
+
+Adicionalmente, existe otra manera de clasificar las variables cuantitativas.   
+- **Intervalo:** No tienen cero absoluto, es decir el cero no implica la no existencia de valor. E.g, Temperatura, Calificación,Edad medida en años cumplidos.     
+- **Razón:** Tienen cero absoluto, es decir que el cero implica que no existe valor. E.g, Altura, Masa, Edad, # de hijos.
+
+## Análisis sobre la variable de Genero en los datos de diabetes.
+
+La variable de genero según los tipos definidos arriba corresponde a una variable, de tipo cualitativa, nominal. Es decir, es una variable que representa una cualidad del paciente y además no es posible darle un orden a esta variabl, no existe una medida superior o inferior que la otra.   
+
+Antes de cualquier gráfica se debe hacer una tabla de frecuencias, (En los lenguajes de programacion modernos como python o R, ya es posible ahorrarse este paso y pasar a graficar, el mismo software las crea y grafica con base en ellas)
+
+```{r}
+datosDiabetes = read.csv('https://raw.githubusercontent.com/Cruzalirio/Ucentral/master/Bases/Diabetes.csv', sep=';')
+datosDiabetes = as.data.frame(datosDiabetes)
+N_of_Rows = dim(datosDiabetes)[1]
+datosDiabetes
+```
+
+```{r}
+FrecAbs_Table = group_by(datosDiabetes, Gender) %>% summarize(FrecAbs = n())
+FrecAbs_Table
+```
+Podemos observar que existen las pacientes masculinos que femeninos en el conjunto de datos. ¿Es posible ver en que proporcion es mas grande?, es decir en terminos porcentuales.
+
+```{r}
+FrecRel_Table = group_by(datosDiabetes, Gender) %>% summarize(FrecRel = round(n()*100/N_of_Rows,2))
+FrecRel_Table
+```
+Esta tabla se denomina tabla de frecuencias relativas.
+
+Con esta tabla podemos genera un gráfico bastante útil, gráfico de torta, porque la suma del porcentaje femenino y masculino representan el 100% y son pocas clases, lo cual lo hace facil de entender e interpretar.
+
+```{r}
+# Compute the cumulative percentages (top of each rectangle)
+FrecRel_Table$ymax = cumsum(FrecRel_Table$FrecRel)
+
+# Compute the bottom of each rectangle
+FrecRel_Table$ymin = c(0, head(FrecRel_Table$ymax, n=-1))
+
+# Compute label position
+FrecRel_Table$labelPosition <- (FrecRel_Table$ymax + FrecRel_Table$ymin) / 2
+
+# Compute a good label
+FrecRel_Table$label <- paste0(FrecRel_Table$Gender, "\n value: ", FrecRel_Table$FrecRel, "%")
+
+## Gráfico de pastel
+ggplot(data=FrecRel_Table, mapping = aes(ymax=ymax, ymin=ymin, xmax=4, xmin=3, fill=Gender)) + 
+  geom_rect() + 
+  coord_polar(theta = "y") +
+  geom_label( x=3.6, aes(y=labelPosition, label=label), size=4) +
+  ggtitle("Proportion of Gender")
+```
+Las tablas de frecuencia pueden complementarse con dos columnas adicionales **Frecuencia Absoluta Acumulada** y **Frecuencia Relativa Acumulada**, solo deben utilizarse para variables cualitativas que sean ordinales y no tiene sentido sumarlas en un total.   
+
+En este tipo son más útiles las variables de barras o circulares.   
+
+## Análisis sobre la variable de Edad en los datos de diabetes.
+
+Esta variable es de tipo Cuantitativa, discreta de Intervalo. porque tener 0 años no representa ausencia de edad. Esto debido a que se mide la edad en número de años cumplidos, un bebe con 6 meses de edad tendra cero años pero no significa que no tenga edad.
+
+En esta grafica debemos evaluar cuantas diferentes edades estan registradas.
+
+```{r}
+length(unique(datosDiabetes$Age))
+```
+51 edades diferentes en un gráfico circular o de pastel es dificil de interpretar o comparar entre clases igualmente que un grafico de barras, en el caso de tener muchas clases es mejor generar grupos de datos (grupos de clases). El nuevo problema es el escoger cuantos grupos. Una técnica bastante utilizada es la regla de sturges, que define la cantidad de grupos con base en esta formula matemática.
+
+Para el caso de la edad, podemos evaluar cuantos serian los grupos recomendados por la regla de sturges.
+```{r}
+gruposSturges= 1+log2(51)
+gruposSturges
+```
+Seis clases es facil de interpretar.
+Para crear la gráfica debemos calcular el rango (diferencia entre el valor maximo y minimo de una variable cuantitativa)
+```{r}
+rangoEdad = max(datosDiabetes$Age) - min(datosDiabetes$Age)
+rangoEdad
+```
+Con este valor podemos saber como separar cada grupo
+
+```{r}
+delta = rangoEdad/as.integer(gruposSturges)
+delta
+```
+Es decir cada grupo sera de 12.3333 de rango. Pero esto suele ser un poco absurdo es mejor avanzar en valores enteros. Lo tomaremos en 12. Por facilidad este diagrama de barras especial se denomina histograma, y le podemos asignar cuantos grupos necesitamos.
+
+```{r}
+ggplot(data = datosDiabetes, mapping = aes(x=Age)) + geom_histogram(bins=7)
+```
+
